@@ -1,6 +1,6 @@
 # Description
 
-[Fluent Bit](https://fluentbit.io) input plugin able to collect access [Docker Container Stats](https://docs.docker.com/engine/api/v1.41/#operation/ContainerStats)
+[Fluent Bit](https://fluentbit.io) input plugin able to access [Docker Container Stats](https://docs.docker.com/engine/api/v1.41/#operation/ContainerStats)
 
 # Requirements
 
