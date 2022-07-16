@@ -5,7 +5,7 @@
 # Requirements
 
 - Docker
-- Docker image `etriphany/fluent-bit-plugin-dev`
+- Docker image `fluent-beats/fluent-bit-plugin-dev`
 
 # Build
 ```bash
