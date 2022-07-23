@@ -1,8 +1,7 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 
-/*  Fluent Bit
+/*  Etriphany
  *  ==========
- *  Copyright (C) 2015-2022 The Fluent Bit Authors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -53,7 +52,7 @@ struct flb_in_dstats_config *dstats_config_init(struct flb_input_instance *ins,
         return NULL;
     }
 
-    /* Allocate buffer for events */
+    /* Allocate buffer for stats */
     ctx->buf = flb_malloc(ctx->buf_size);
     if (!ctx->buf) {
         flb_errno();

@@ -1,8 +1,7 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 
-/*  Fluent Bit
+/*  Etriphany
  *  ==========
- *  Copyright (C) 2015-2022 The Fluent Bit Authors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -28,18 +27,6 @@
 #include "docker_stats.h"
 #include "docker_stats_config.h"
 
-static int is_recoverable_error(int error)
-{
-    /* ENOTTY:
-          It reports on Docker in Docker mode.
-          https://github.com/fluent/fluent-bit/issues/3439#issuecomment-831424674
-     */
-    if (error == ENOTTY || error == EBADF) {
-        return FLB_TRUE;
-    }
-    return FLB_FALSE;
-}
-
 static container_info *init_container_info(char *id)
 {
     container_info *container;
@@ -57,20 +44,19 @@ static container_info *init_container_info(char *id)
         return NULL;
     }
     strncpy(container->id, id, DOCKER_SHORT_ID_LEN);
-    container->id[DOCKER_SHORT_ID_LEN + 1] = '\0';
+    container->id[DOCKER_SHORT_ID_LEN] = '\0';
 
     return container;
 }
 
 /**
- * Sends request to docker's unix socket
- * HTTP GET /containers/{ID}/stats?stream=false&one-shot=true
+ * Traverse /var/lib/docker/containers folder to pick container
  *
  * @param ctx  Pointer to flb_in_dstats_config
  *
- * @return int 0 on success, -1 on failure
+ * @return mk_list with all retrieved containers
  */
-static struct mk_list *get_available_container_ids(struct flb_in_dstats_config *ctx)
+static struct mk_list *get_containers_info(struct flb_in_dstats_config *ctx)
 {
     DIR *dp;
     struct dirent *ep;
@@ -109,37 +95,26 @@ static struct mk_list *get_available_container_ids(struct flb_in_dstats_config *
  *
  * @return int 0 on success, -1 on failure
  */
-static int dstats_unix_socket_send(struct flb_in_dstats_config *ctx, char* container_id)
+static void dstats_unix_socket_write(struct flb_in_dstats_config *ctx,
+                                     char* container_id)
 {
-    ssize_t bytes;
     char request[512];
 
     snprintf(request, sizeof(request), "GET /containers/%s/stats?stream=false HTTP/1.0\r\n\r\n", container_id);
-    flb_plg_trace(ctx->ins, "writing to socket %s", request);
+    flb_plg_trace(ctx->ins, "send request %s", request);
+
+    /* Write request */
     write(ctx->fd, request, strlen(request));
 
-    /* Read the initial http response */
-    bytes = read(ctx->fd, ctx->buf, ctx->buf_size - 1);
-    if (bytes == -1) {
-        flb_errno();
-    }
-    flb_plg_debug(ctx->ins, "read %zu bytes from socket", bytes);
-
-    return 0;
+    return;
 }
-
-
-static int create_reconnect_event(struct flb_input_instance *ins,
-                                  struct flb_config *config,
-                                  struct flb_in_dstats_config *ctx);
 
 /**
  * Read response from docker's unix socket.
  *
  * @param ins           Pointer to flb_input_instance
  * @param config        Pointer to flb_config
- * @param in_context    void Pointer used to cast to
- *                      flb_in_dstats_config
+ * @param in_context    void Pointer used to cast to flb_in_dstats_config
  *
  * @return int Always returns success
  */
@@ -148,16 +123,23 @@ static int dstats_unix_socket_read(struct flb_input_instance *ins,
 {
     int ret = 0;
     int error;
+    char *body;
     size_t str_len = 0;
     struct flb_in_dstats_config *ctx = in_context;
     msgpack_packer mp_pck;
     msgpack_sbuffer mp_sbuf;
 
+    /* Read response */
     ret = read(ctx->fd, ctx->buf, ctx->buf_size - 1);
 
     if (ret > 0) {
         str_len = ret;
         ctx->buf[str_len] = '\0';
+
+        /* Skip HTTP headers */
+        body = strstr(ctx->buf, HTTP_BODY_DELIMITER);
+        body += strlen(HTTP_BODY_DELIMITER);
+        str_len = strlen(body);
 
         /* Initialize local msgpack buffer */
         msgpack_sbuffer_init(&mp_sbuf);
@@ -170,36 +152,13 @@ static int dstats_unix_socket_read(struct flb_input_instance *ins,
         msgpack_pack_str(&mp_pck, flb_sds_len(ctx->key));
         msgpack_pack_str_body(&mp_pck, ctx->key, flb_sds_len(ctx->key));
         msgpack_pack_str(&mp_pck, str_len);
-        msgpack_pack_str_body(&mp_pck, ctx->buf, str_len);
-        flb_input_chunk_append_raw(ins, NULL, 0, mp_sbuf.data,
-                                    mp_sbuf.size);
+        msgpack_pack_str_body(&mp_pck, body, str_len);
+        flb_input_chunk_append_raw(ins, NULL, 0, mp_sbuf.data, mp_sbuf.size);
         msgpack_sbuffer_destroy(&mp_sbuf);
-
     }
-    else if (ret == 0) {
-        /* EOF */
-
-        /* docker service may be restarted */
-        flb_plg_info(ctx->ins, "EOF detected. Re-initialize");
-        if (ctx->reconnect_retry_limits > 0) {
-            ret = create_reconnect_event(ins, config, ctx);
-            if (ret < 0) {
-                return ret;
-            }
-        }
-    }
-    else {
+    else if (ret < 0) {
         error = errno;
-        flb_plg_error(ctx->ins, "read returned error: %d, %s", error,
-                      strerror(error));
-        if (is_recoverable_error(error)) {
-            if (ctx->reconnect_retry_limits > 0) {
-                ret = create_reconnect_event(ins, config, ctx);
-                if (ret < 0) {
-                    return ret;
-                }
-            }
-        }
+        flb_plg_error(ctx->ins, "socket error: %d, %s", error, strerror(error));
     }
 
     return 0;
@@ -212,15 +171,25 @@ static int dstats_unix_socket_read(struct flb_input_instance *ins,
  *
  * @return int 0 on success, -1 on failure
  */
-static int dstats_unix_socket_create(struct flb_in_dstats_config *ctx)
+static int dstats_unix_socket_connect(struct flb_in_dstats_config *ctx)
 {
     unsigned long len;
     size_t address_length;
     struct sockaddr_un address;
 
-    ctx->fd = flb_net_socket_create(AF_UNIX, FLB_FALSE);
-    if (ctx->fd == -1) {
-        return -1;
+    /* Disconnect */
+    if(ctx->fd > 0) {
+        flb_plg_trace(ctx->ins, "closed socket fd=%d", ctx->fd);
+        close(ctx->fd);
+        ctx->fd = -1;
+    }
+
+    /* Create */
+    if (ctx->fd < 0) {
+        ctx->fd = flb_net_socket_create(AF_UNIX, FLB_FALSE);
+        if (ctx->fd == -1) {
+            return -1;
+        }
     }
 
     /* Prepare the unix socket path */
@@ -228,144 +197,13 @@ static int dstats_unix_socket_create(struct flb_in_dstats_config *ctx)
     address.sun_family = AF_UNIX;
     sprintf(address.sun_path, "%s", ctx->unix_path);
     address_length = sizeof(address.sun_family) + len + 1;
+
+    /* Connect */
     if (connect(ctx->fd, (struct sockaddr *)&address, address_length) == -1) {
         flb_errno();
         close(ctx->fd);
         return -1;
     }
-
-    return 0;
-}
-
-static int cb_dstats_collect(struct flb_input_instance *ins,
-                             struct flb_config *config, void *in_context);
-
-static int reconnect_docker_sock(struct flb_input_instance *ins,
-                                 struct flb_config *config,
-                                 struct flb_in_dstats_config *ctx)
-{
-    int ret;
-
-    /* remove old socket collector */
-    if (ctx->coll_id >= 0) {
-        ret = flb_input_collector_delete(ctx->coll_id, ins);
-        if (ret < 0) {
-            flb_plg_error(ctx->ins, "failed to pause event");
-            return -1;
-        }
-        ctx->coll_id = -1;
-    }
-    if (ctx->fd > 0) {
-        flb_plg_debug(ctx->ins, "close socket fd=%d", ctx->fd);
-        close(ctx->fd);
-        ctx->fd = -1;
-    }
-
-    /* create socket again */
-    if (dstats_unix_socket_create(ctx) < 0) {
-        flb_plg_error(ctx->ins, "failed to re-initialize socket");
-        if (ctx->fd > 0) {
-            flb_plg_debug(ctx->ins, "close socket fd=%d", ctx->fd);
-            close(ctx->fd);
-            ctx->fd = -1;
-        }
-        return -1;
-    }
-
-    /* set event */
-    ctx->coll_id = flb_input_set_collector_event(ins,
-                                                 cb_dstats_collect,
-                                                 ctx->fd, config);
-    if (ctx->coll_id < 0) {
-        flb_plg_error(ctx->ins,
-                      "could not set collector for IN_DOCKER_STATS plugin");
-        close(ctx->fd);
-        ctx->fd = -1;
-        return -1;
-    }
-    ret = flb_input_collector_start(ctx->coll_id, ins);
-    if (ret < 0) {
-        flb_plg_error(ctx->ins,
-                      "could not start collector for IN_DOCKER_STATS plugin");
-        flb_input_collector_delete(ctx->coll_id, ins);
-        close(ctx->fd);
-        ctx->coll_id = -1;
-        ctx->fd = -1;
-        return -1;
-    }
-
-    flb_plg_info(ctx->ins, "Reconnect successful");
-
-    return 0;
-}
-
-static int cb_reconnect(struct flb_input_instance *ins,
-                        struct flb_config *config,
-                        void *in_context)
-{
-    struct flb_in_dstats_config *ctx = in_context;
-    int ret;
-
-    flb_plg_info(ctx->ins, "Retry(%d/%d)",
-                 ctx->current_retries, ctx->reconnect_retry_limits);
-    ret = reconnect_docker_sock(ins, config, ctx);
-    if (ret < 0) {
-        /* Failed to reconnect */
-        ctx->current_retries++;
-        if (ctx->current_retries > ctx->reconnect_retry_limits) {
-            /* give up */
-            flb_plg_error(ctx->ins, "Failed to retry. Giving up...");
-            goto cb_reconnect_end;
-        }
-        flb_plg_info(ctx->ins, "Failed. Waiting for next retry..");
-        return 0;
-    }
-
- cb_reconnect_end:
-    if(flb_input_collector_delete(ctx->retry_coll_id, ins) < 0) {
-        flb_plg_error(ctx->ins, "failed to delete timer event");
-    }
-    ctx->current_retries = 0;
-    ctx->retry_coll_id = -1;
-    return ret;
-}
-
-static int create_reconnect_event(struct flb_input_instance *ins,
-                                  struct flb_config *config,
-                                  struct flb_in_dstats_config *ctx)
-{
-    int ret;
-
-    if (ctx->retry_coll_id >= 0) {
-        flb_plg_debug(ctx->ins, "already retring ?");
-        return 0;
-    }
-
-    /* try before creating event to stop incoming event */
-    ret = reconnect_docker_sock(ins, config, ctx);
-    if (ret == 0) {
-        return 0;
-    }
-
-    ctx->current_retries = 1;
-    ctx->retry_coll_id = flb_input_set_collector_time(ins,
-                                                      cb_reconnect,
-                                                      ctx->reconnect_retry_interval,
-                                                      0,
-                                                      config);
-    if (ctx->retry_coll_id < 0) {
-        flb_plg_error(ctx->ins, "failed to create timer event");
-        return -1;
-    }
-    ret = flb_input_collector_start(ctx->retry_coll_id, ins);
-    if (ret < 0) {
-        flb_plg_error(ctx->ins, "failed to start timer event");
-        flb_input_collector_delete(ctx->retry_coll_id, ins);
-        ctx->retry_coll_id = -1;
-        return -1;
-    }
-    flb_plg_info(ctx->ins, "create reconnect event. interval=%d second",
-                 ctx->reconnect_retry_interval);
 
     return 0;
 }
@@ -389,12 +227,13 @@ static int cb_dstats_collect(struct flb_input_instance *ins,
     struct mk_list *tmp;
     container_info *container;
 
-    containers = get_available_container_ids(ctx);
+    containers = get_containers_info(ctx);
     mk_list_foreach_safe(head, tmp, containers) {
         container = mk_list_entry(head, container_info, _head);
-        flb_plg_info(ctx->ins, "container = %s", container->id);
-        //dstats_unix_socket_send(ctx, container->id);
-        //dstats_unix_socket_read(ins, config, in_context);
+
+        dstats_unix_socket_connect(ctx);
+        dstats_unix_socket_write(ctx, container->id);
+        dstats_unix_socket_read(ins, config, in_context);
     }
 
     return 0;
@@ -421,15 +260,7 @@ static int in_dstats_init(struct flb_input_instance *ins,
         return -1;
     }
     ctx->ins = ins;
-    ctx->retry_coll_id = -1;
-    ctx->current_retries = 0;
-
-    if (dstats_unix_socket_create(ctx) != 0) {
-        flb_plg_error(ctx->ins, "could not listen on unix://%s",
-                      ctx->unix_path);
-        dstats_config_destroy(ctx);
-        return -1;
-    }
+    ctx->fd = -1;
 
     /* Set the context */
     flb_input_set_context(ins, ctx);
@@ -439,13 +270,10 @@ static int in_dstats_init(struct flb_input_instance *ins,
                                                 ctx->collect_interval,
                                                 0, config);
     if(ctx->coll_id < 0){
-        flb_plg_error(ctx->ins,
-                      "could not set collector for IN_DOCKER_STATS plugin");
+        flb_plg_error(ctx->ins, "could not set collector for IN_DOCKER_STATS plugin");
         dstats_config_destroy(ctx);
         return -1;
     }
-
-    flb_plg_info(ctx->ins, "connected on %s", ctx->unix_path);
 
     return 0;
 }
@@ -499,16 +327,6 @@ static struct flb_config_map config_map[] = {
      0, FLB_TRUE, offsetof(struct flb_in_dstats_config, key),
      "Set the key name to store unparsed Docker events"
     },
-    {
-     FLB_CONFIG_MAP_INT, "reconnect.retry_limits", "5",
-     0, FLB_TRUE, offsetof(struct flb_in_dstats_config, reconnect_retry_limits),
-     "Maximum number to retry to connect docker socket"
-    },
-    {
-     FLB_CONFIG_MAP_INT, "reconnect.retry_interval", "1",
-     0, FLB_TRUE, offsetof(struct flb_in_dstats_config, reconnect_retry_interval),
-     "Retry interval to connect docker socket"
-    },
     /* EOF */
     {0}
 };
@@ -523,6 +341,5 @@ struct flb_input_plugin in_docker_stats_plugin = {
     .cb_flush_buf = NULL,
     .cb_exit      = in_dstats_exit,
     .config_map   = config_map,
-    .flags        = FLB_INPUT_NET,
-    .event_type   = FLB_INPUT_METRICS
+    .flags        = FLB_INPUT_NET
 };

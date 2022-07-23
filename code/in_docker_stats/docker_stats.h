@@ -1,8 +1,7 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 
-/*  Fluent Bit
+/*  Etriphany
  *  ==========
- *  Copyright (C) 2015-2022 The Fluent Bit Authors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -33,7 +32,7 @@
 #define DEFAULT_FIELD_NAME          "message"
 #define DEFAULT_UNIX_SOCKET_PATH    "/var/run/docker.sock"
 #define DEFAULT_DOCKER_LIB_ROOT     "/var/lib/docker/containers"
-
+#define HTTP_BODY_DELIMITER         "\r\n\r\n"
 
 /* Method added latter on Fluenbit under macro FLB_INPUT_RETURN */
 static inline void flb_input_return_do(int ret) {
@@ -62,14 +61,6 @@ struct flb_in_dstats_config
     char *buf;
     size_t buf_size;
     flb_sds_t key;
-
-    /* retries */
-    int reconnect_retry_limits;
-    int reconnect_retry_interval;
-
-    /* retries (internal) */
-    int current_retries;
-    int retry_coll_id;
 
     struct flb_input_instance *ins; /* Input plugin instace */
 
