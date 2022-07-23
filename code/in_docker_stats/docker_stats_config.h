@@ -17,13 +17,13 @@
  *  limitations under the License.
  */
 
-#ifndef FLB_IN_DE_CONFIG_H
-#define FLB_IN_DE_CONFIG_H
+#ifndef FLB_IN_DSTATS_CONFIG_H
+#define FLB_IN_DSTATS_CONFIG_H
 
 #include "docker_stats.h"
 
-struct flb_in_de_config *de_config_init(struct flb_input_instance *ins,
-                                        struct flb_config *config);
-int de_config_destroy(struct flb_in_de_config *config);
+struct flb_in_dstats_config *dstats_config_init(struct flb_input_instance *ins,
+                                                struct flb_config *config);
+int dstats_config_destroy(struct flb_in_dstats_config *config);
 
 #endif

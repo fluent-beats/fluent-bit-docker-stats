@@ -29,17 +29,17 @@
  * @param ins     Pointer to flb_input_instance
  * @param config  Pointer to flb_config
  *
- * @return struct flb_in_de_config* Pointer to the plugin's
+ * @return struct flb_in_dstats_config* Pointer to the plugin's
  *         structure on success, NULL on failure.
  */
-struct flb_in_de_config *de_config_init(struct flb_input_instance *ins,
+struct flb_in_dstats_config *dstats_config_init(struct flb_input_instance *ins,
                                         struct flb_config *config)
 {
     int ret;
     const char *tmp;
-    struct flb_in_de_config *ctx;
+    struct flb_in_dstats_config *ctx;
 
-    ctx = flb_calloc(1, sizeof(struct flb_in_de_config));
+    ctx = flb_calloc(1, sizeof(struct flb_in_dstats_config));
     if (!ctx) {
         flb_errno();
         return NULL;
@@ -61,28 +61,17 @@ struct flb_in_de_config *de_config_init(struct flb_input_instance *ins,
         return NULL;
     }
 
-    tmp = flb_input_get_property("parser", ins);
-    if (tmp) {
-        ctx->parser = flb_parser_get(tmp, config);
-        if (ctx->parser == NULL) {
-            flb_plg_error(ctx->ins, "requested parser '%s' not found", tmp);
-            flb_free(ctx->buf);
-            flb_free(ctx);
-            return NULL;
-        }
-    }
-
     return ctx;
 }
 
 /**
  * Function to destroy docker_stats plugin.
  *
- * @param ctx  Pointer to flb_in_de_config
+ * @param ctx  Pointer to flb_in_dstats_config
  *
  * @return int 0
  */
-int de_config_destroy(struct flb_in_de_config *ctx)
+int dstats_config_destroy(struct flb_in_dstats_config *ctx)
 {
     if (ctx->buf) {
         flb_free(ctx->buf);
