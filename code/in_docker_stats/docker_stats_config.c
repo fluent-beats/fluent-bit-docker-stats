@@ -60,6 +60,18 @@ struct flb_in_dstats_config *dstats_config_init(struct flb_input_instance *ins,
         return NULL;
     }
 
+    /* Optional parser */
+    tmp = flb_input_get_property("parser", ins);
+    if (tmp) {
+        ctx->parser = flb_parser_get(tmp, config);
+        if (ctx->parser == NULL) {
+            flb_plg_error(ctx->ins, "requested parser '%s' not found", tmp);
+            flb_free(ctx->buf);
+            flb_free(ctx);
+            return NULL;
+        }
+    }
+
     return ctx;
 }
 

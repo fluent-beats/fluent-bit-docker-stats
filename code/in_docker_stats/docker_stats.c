@@ -129,6 +129,12 @@ static int dstats_unix_socket_read(struct flb_input_instance *ins,
     msgpack_packer mp_pck;
     msgpack_sbuffer mp_sbuf;
 
+    /* variables for parser */
+    int parser_ret = -1;
+    void *out_buf = NULL;
+    size_t out_size = 0;
+    struct flb_time out_time;
+
     /* Read response */
     ret = read(ctx->fd, ctx->buf, ctx->buf_size - 1);
 
@@ -141,20 +147,49 @@ static int dstats_unix_socket_read(struct flb_input_instance *ins,
         body += strlen(HTTP_BODY_DELIMITER);
         str_len = strlen(body);
 
-        /* Initialize local msgpack buffer */
-        msgpack_sbuffer_init(&mp_sbuf);
-        msgpack_packer_init(&mp_pck, &mp_sbuf, msgpack_sbuffer_write);
+        if (!ctx->parser) {
+            /* Initialize local msgpack buffer */
+            msgpack_sbuffer_init(&mp_sbuf);
+            msgpack_packer_init(&mp_pck, &mp_sbuf, msgpack_sbuffer_write);
 
-        msgpack_pack_array(&mp_pck, 2);
-        flb_pack_time_now(&mp_pck);
-        msgpack_pack_map(&mp_pck, 1);
+            msgpack_pack_array(&mp_pck, 2);
+            flb_pack_time_now(&mp_pck);
+            msgpack_pack_map(&mp_pck, 1);
 
-        msgpack_pack_str(&mp_pck, flb_sds_len(ctx->key));
-        msgpack_pack_str_body(&mp_pck, ctx->key, flb_sds_len(ctx->key));
-        msgpack_pack_str(&mp_pck, str_len);
-        msgpack_pack_str_body(&mp_pck, body, str_len);
-        flb_input_chunk_append_raw(ins, NULL, 0, mp_sbuf.data, mp_sbuf.size);
-        msgpack_sbuffer_destroy(&mp_sbuf);
+            msgpack_pack_str(&mp_pck, flb_sds_len(ctx->key));
+            msgpack_pack_str_body(&mp_pck, ctx->key, flb_sds_len(ctx->key));
+            msgpack_pack_str(&mp_pck, str_len);
+            msgpack_pack_str_body(&mp_pck, body, str_len);
+            flb_input_chunk_append_raw(ins, NULL, 0, mp_sbuf.data, mp_sbuf.size);
+            msgpack_sbuffer_destroy(&mp_sbuf);
+        }
+        else {
+            flb_time_get(&out_time);
+            parser_ret = flb_parser_do(ctx->parser, body, str_len - 1,
+                                       &out_buf, &out_size, &out_time);
+            if (parser_ret >= 0) {
+                if (flb_time_to_double(&out_time) == 0.0) {
+                    flb_time_get(&out_time);
+                }
+
+                /* Initialize local msgpack buffer */
+                msgpack_sbuffer_init(&mp_sbuf);
+                msgpack_packer_init(&mp_pck, &mp_sbuf, msgpack_sbuffer_write);
+
+                msgpack_pack_array(&mp_pck, 2);
+                flb_time_append_to_msgpack(&out_time, &mp_pck, 0);
+                msgpack_sbuffer_write(&mp_sbuf, out_buf, out_size);
+
+                flb_input_chunk_append_raw(ins, NULL, 0,mp_sbuf.data, mp_sbuf.size);
+                msgpack_sbuffer_destroy(&mp_sbuf);
+                flb_free(out_buf);
+            }
+            else {
+                flb_plg_trace(ctx->ins, "tried to parse: %s", ctx->buf);
+                flb_plg_trace(ctx->ins, "buf_size %zu", ctx->buf_size);
+                flb_plg_error(ctx->ins, "parser returned an error: %d", parser_ret);
+            }
+        }
     }
     else if (ret < 0) {
         error = errno;
@@ -303,7 +338,7 @@ static int in_dstats_exit(void *data, struct flb_config *config)
 /* Configuration properties map */
 static struct flb_config_map config_map[] = {
     {
-     FLB_CONFIG_MAP_TIME, "collect_interval", "10s",
+     FLB_CONFIG_MAP_TIME, "collect_interval", "10",
      0, FLB_TRUE, offsetof(struct flb_in_dstats_config, collect_interval),
      "Stats collection interval."
     },
@@ -321,6 +356,11 @@ static struct flb_config_map config_map[] = {
      FLB_CONFIG_MAP_SIZE, "buffer_size", "8k",
      0, FLB_TRUE, offsetof(struct flb_in_dstats_config, buf_size),
      "Set buffer size to read events"
+    },
+    {
+     FLB_CONFIG_MAP_STR, "parser", NULL,
+      0, FLB_FALSE, 0,
+     "Optional parser for records, if not set, records are packages under 'key'"
     },
     {
      FLB_CONFIG_MAP_STR, "key", DEFAULT_FIELD_NAME,

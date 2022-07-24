@@ -62,6 +62,7 @@ struct flb_in_dstats_config
     size_t buf_size;
     flb_sds_t key;
 
+    struct flb_parser *parser;
     struct flb_input_instance *ins; /* Input plugin instace */
 
 };
