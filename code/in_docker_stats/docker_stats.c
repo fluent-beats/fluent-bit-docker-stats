@@ -213,7 +213,7 @@ static int dstats_unix_socket_connect(struct flb_in_dstats_config *ctx)
     struct sockaddr_un address;
 
     /* Disconnect */
-    if(ctx->fd > 0) {
+    if (ctx->fd > 0) {
         flb_plg_trace(ctx->ins, "closed socket fd=%d", ctx->fd);
         close(ctx->fd);
         ctx->fd = -1;
@@ -266,9 +266,11 @@ static int cb_dstats_collect(struct flb_input_instance *ins,
     mk_list_foreach_safe(head, tmp, containers) {
         container = mk_list_entry(head, container_info, _head);
 
-        dstats_unix_socket_connect(ctx);
-        dstats_unix_socket_write(ctx, container->id);
-        dstats_unix_socket_read(ins, config, in_context);
+        if(dstats_unix_socket_connect(ctx) != -1)
+        {
+            dstats_unix_socket_write(ctx, container->id);
+            dstats_unix_socket_read(ins, config, in_context);
+        }
     }
 
     return 0;
