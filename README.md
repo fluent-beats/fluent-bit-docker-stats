@@ -38,6 +38,6 @@ docker run --rm \
 
  It will use 2 parameters to improve performance and save rescources:
  * stream=false (avoids socket streaming, and send just a single value)
- * one-shot=true (faster retrival on single shot)
+ * one-shot=false (can't use single shot in order to recover `precpu_stats`)
 
  For each response the plugin will simply send the JSON values to the output without any transformation or parsing, saving even more memory and resources.

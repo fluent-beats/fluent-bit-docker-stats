@@ -88,7 +88,7 @@ static struct mk_list *get_containers_info(struct flb_in_dstats_config *ctx)
 
 /**
  * Sends request to docker's unix socket
- * HTTP GET /containers/{ID}/stats?stream=false&one-shot=true
+ * HTTP GET /containers/{ID}/stats?stream=false&one-shot=false
  *
  * @param ctx  Pointer to flb_in_dstats_config
  * @param container_id Unique docker container id
