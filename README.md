@@ -34,10 +34,17 @@ docker run --rm \
 > This plugin WILL NOT WORK without both volumes properly mounted on `Fluentbit` container
 
 ## Collecting stats
- The plugin will access the Docker Engine endpoint `/containers/{id}/stats`.
+The plugin will access the Docker Engine endpoint `/containers/{id}/stats`.
 
- It will use 2 parameters to improve performance and save rescources:
+It will use the following parameters:
  * stream=false (avoids socket streaming, and send just a single value)
  * one-shot=false (can't use single shot in order to recover `precpu_stats`)
+
+Each response will include important information like:
+
+ - Container CPU stats
+ - Container memory stats
+ - Container network stats
+ - Container disk stats
 
  For each response the plugin will simply send the JSON values to the output without any transformation or parsing, saving even more memory and resources.
