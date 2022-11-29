@@ -37,6 +37,7 @@ static container_info *init_container_info(char *id)
         return NULL;
     }
 
+    /* Safe to store short container id */
     container->id = flb_malloc(sizeof(char)*(DOCKER_SHORT_ID_LEN + 1));
     if (!container->id) {
         flb_errno();
@@ -87,11 +88,11 @@ static struct mk_list *get_containers_info(struct flb_in_dstats_config *ctx)
 }
 
 /**
- * Sends request to docker's unix socket
+ * Sends request to Docker's unix socket
  * HTTP GET /containers/{ID}/stats?stream=false&one-shot=false
  *
  * @param ctx  Pointer to flb_in_dstats_config
- * @param container_id Unique docker container id
+ * @param container_id Unique Docker container id
  *
  * @return int 0 on success, -1 on failure
  */
@@ -110,7 +111,7 @@ static void dstats_unix_socket_write(struct flb_in_dstats_config *ctx,
 }
 
 /**
- * Read response from docker's unix socket.
+ * Read response from Docker's unix socket.
  *
  * @param ins           Pointer to flb_input_instance
  * @param config        Pointer to flb_config
@@ -200,7 +201,7 @@ static int dstats_unix_socket_read(struct flb_input_instance *ins,
 }
 
 /**
- * Creates the connection to docker's unix socket
+ * Creates the connection to Docker's unix socket
  *
  * @param ctx  Pointer to flb_in_dstats_config
  *
@@ -244,7 +245,7 @@ static int dstats_unix_socket_connect(struct flb_in_dstats_config *ctx)
 }
 
 /**
- * Callback function to interact with docker engine API.
+ * Callback function to interact with Docker engine API.
  *
  * @param ins           Pointer to flb_input_instance
  * @param config        Pointer to flb_config
@@ -277,7 +278,7 @@ static int cb_dstats_collect(struct flb_input_instance *ins,
 }
 
 /**
- * Callback function to initialize docker stats plugin
+ * Callback function to initialize the plugin
  *
  * @param ins     Pointer to flb_input_instance
  * @param config  Pointer to flb_config
