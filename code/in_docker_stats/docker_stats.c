@@ -113,6 +113,11 @@ static void dstats_unix_socket_write(struct flb_in_dstats_config *ctx,
 /**
  * Read response from Docker's unix socket.
  *
+ * Notes:
+ *   The JSON response is sent as MessagePack string.
+ *   To parse it back the Fluentbit JSON parser can be used.
+ *   The Fluentbit JSON parser breaks if the final '\n' in the response is removed.
+ *
  * @param ins           Pointer to flb_input_instance
  * @param config        Pointer to flb_config
  * @param in_context    void Pointer used to cast to flb_in_dstats_config
@@ -130,7 +135,7 @@ static int dstats_unix_socket_read(struct flb_input_instance *ins,
     msgpack_packer mp_pck;
     msgpack_sbuffer mp_sbuf;
 
-    /* variables for parser */
+    /* Variables for parser */
     int parser_ret = -1;
     void *out_buf = NULL;
     size_t out_size = 0;
