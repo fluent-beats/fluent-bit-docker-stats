@@ -27,8 +27,8 @@
 #define OS_DIR_TYPE                 4
 #define DOCKER_LONG_ID_LEN          64
 #define DOCKER_SHORT_ID_LEN         12
-#define DEFAULT_BUF_SIZE            8192
-#define MIN_BUF_SIZE                2048
+#define DEFAULT_BUF_SIZE            "8192"
+#define MIN_BUF_SIZE                "2048"
 #define DEFAULT_FIELD_NAME          "message"
 #define DEFAULT_UNIX_SOCKET_PATH    "/var/run/docker.sock"
 #define DEFAULT_DOCKER_LIB_ROOT     "/var/lib/docker/containers"

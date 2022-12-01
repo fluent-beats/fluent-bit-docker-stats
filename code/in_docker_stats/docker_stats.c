@@ -361,7 +361,7 @@ static struct flb_config_map config_map[] = {
      "Define Docker unix socket path to read events"
     },
     {
-     FLB_CONFIG_MAP_SIZE, "buffer_size", "8k",
+     FLB_CONFIG_MAP_SIZE, "buf_size", DEFAULT_BUF_SIZE,
      0, FLB_TRUE, offsetof(struct flb_in_dstats_config, buf_size),
      "Set buffer size to read events"
     },
