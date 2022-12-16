@@ -346,7 +346,7 @@ static struct flb_config_map config_map[] = {
     {
      FLB_CONFIG_MAP_TIME, "collect_interval", "10",
      0, FLB_TRUE, offsetof(struct flb_in_dstats_config, collect_interval),
-     "Stats collection interval."
+     "Collect interval."
     },
     {
      FLB_CONFIG_MAP_STR, "unix_path", DEFAULT_UNIX_SOCKET_PATH,
@@ -380,7 +380,7 @@ static struct flb_config_map config_map[] = {
 /* Plugin reference */
 struct flb_input_plugin in_docker_stats_plugin = {
     .name         = "docker_stats",
-    .description  = "Docker stats",
+    .description  = "Docker stats input plugin",
     .cb_init      = in_dstats_init,
     .cb_pre_run   = NULL,
     .cb_collect   = cb_dstats_collect,

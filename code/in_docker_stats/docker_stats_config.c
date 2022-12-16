@@ -32,7 +32,7 @@
  *         structure on success, NULL on failure.
  */
 struct flb_in_dstats_config *dstats_config_init(struct flb_input_instance *ins,
-                                        struct flb_config *config)
+                                                struct flb_config *config)
 {
     int ret;
     const char *tmp;
