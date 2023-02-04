@@ -47,12 +47,12 @@ Each response will include important information like:
 
 This input plugin can be configured using the following parameters:
 
-| Key  | Description | Default |
-| ---- | ----------- | ------ |
-| Collect_Interval | Interval in seconds to collect data  | 10 |
-| Unix_Path | Define target Unix socket path. | /var/run/docker.sock
-| Containers_Path | Define the folder that contains containers' ids. | /var/lib/docker/containers |
-| Buffer_Size | The size of the buffer used to read data (in bytes or [unit sized](https://docs.fluentbit.io/manual/administration/configuring-fluent-bit/unit-sizes)) | 8192 |
-| Parser | Specify the name of a parser to interpret the entry as a structured message. | None |
-| Key | When a message is unstructured (no parser applied), it's appended as a string under the key name message. | message |
+ Key                    | Description                                                                   | Default
+------------------------|-------------------------------------------------------------------------------|------------------
+ Collect_Interval       | Interval in seconds to collect data                                           | 10
+ Unix_Path              | Define target Unix socket path.                                               | /var/run/docker.sock
+ Containers_Path        | Define the folder that contains containers' ids. | /var/lib/docker/containers
+ Buffer_Size            | The size of the buffer used to read data (in bytes or [unit sized](https://docs.fluentbit.io/manual/administration/configuring-fluent-bit/unit-sizes))                                                                                           | 8192
+ Parser                 | Specify the name of a parser to interpret the entry as a structured message.  | None
+ Key                    | When a message is unstructured (no parser applied), it's appended as a string under the key name message.                                                                                               | message
 
