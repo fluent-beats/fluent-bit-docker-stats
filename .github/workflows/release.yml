@@ -19,9 +19,10 @@ jobs:
         with:
           plugin-path: "./code"
           plugin-name: "in_docker_stats"
+          fluent-bit-version: 1.8.11
 
       - name: Upload
-        uses: shogo82148/actions-upload-release-asset@v1
+        uses: softprops/action-gh-release@v1
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./code/build/flb-in_docker_stats.so
+          files: |
+            ./code/build/flb-in_docker_stats.so
